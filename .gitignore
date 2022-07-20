@@ -1,0 +1,10 @@
+*.py[cod]
+*.sw[op]
+.idea/
+.ipynb_checkpoints/
+__pycache__/
+
+build/
+dist/
+
+*.egg-info/
