@@ -1,14 +1,14 @@
 """
 short design doc to understand the tool.
-problem:
-    security camera
-    no web interface
-    when human is detected, send mail with mp4 of the detection.
+what is the target of this package?
+    outside security camera but with no web interface
+    detect human motion and ignore bushes and shadows
+    on detection, send mail with mp4 video of the detection.
     human detection based on real time AI (HOG+SVM at cv2).
-what it does:
+what it does?
     get images from camera in a loop.
     every x images, check for human detection.
-    on detection, taking all detected images and dumping them to mp4 then sending it over mail.
+    on detection, taking all detected images and dumping them to mp4, then sending it over mail.
 alternative:
     linux motion
         pros:
@@ -27,10 +27,11 @@ how to run this script:
           check_human_every_x_images: 2
         output:
           output_folder: "@format {env[HOME]}/Downloads/captures"
-          # output_folder: C:\Users\israelil\Downloads\captures
+          # output_folder: C:\\Users\\israelil\\Downloads\\captures
           save_all_images: False
           save_images_with_detections: True
           add_detection_box: True
+          duplications_of_each_image_at_video: 5
         debug:
           print_debug_log: True
 
@@ -64,6 +65,8 @@ TODO
     test if it fails to detect or gives false alarm
     test at different place
     test when pointing to a tree
+    delete old captures to avoid filling the disk
+    at tests, put detection speed test, and also camera speed test
 """
 import datetime
 import os
@@ -148,7 +151,7 @@ class HumanDetection:
     def _draw_detection_boxes(self):
         if self.image_with_boxes is not None or self.human_detected is False:
             return False
-        self.image_with_boxes = self.image_cv2_rgb
+        self.image_with_boxes = self.image_cv2_rgb.copy()
         for i, (x, y, w, h) in enumerate(self.detection_boxes):
             if self.detection_avg[i] > self.detection_brightness_level:
                 continue
@@ -172,7 +175,7 @@ class HumanDetection:
         if self.image_cv2_rgb is None:
             raise ReferenceError('no given image. need to run set_image first')
         self._draw_detection_boxes()
-        return self.image_cv2_rgb
+        return self.image_with_boxes
 
     def plot_image_with_boxes(self):
         """
@@ -180,7 +183,7 @@ class HumanDetection:
         :return:
         """
         self.get_image_with_boxes()
-        rgb_img = cv2.cvtColor(self.image_cv2_rgb, cv2.COLOR_BGR2RGB)
+        rgb_img = cv2.cvtColor(self.image_with_boxes, cv2.COLOR_BGR2RGB)
         plt.imshow(rgb_img)
         plt.show()
 
@@ -191,7 +194,7 @@ class HumanDetection:
         :return:
         """
         self.get_image_with_boxes()
-        cv2.imwrite(output_image_path, self.image_cv2_rgb)
+        cv2.imwrite(output_image_path, self.image_with_boxes)
 
 
 class ImageLogger:
@@ -225,7 +228,7 @@ class ImageLogger:
         """
         self.height, self.width, self.layers = self.images_history[0].shape
 
-    def export_to_movie(self, video_full_path):
+    def export_to_movie(self, video_full_path, duplications):
         """
             create a mp4 file from the history images and reset the history logger.
         :param video_full_path:
@@ -234,20 +237,22 @@ class ImageLogger:
         if not len(self.images_history):
             raise 'no images to convert to a movie'
         self._image_properties()
-        self._history_to_movie(video_full_path)
+        self._history_to_movie(video_full_path, duplications)
         self.reset_history()
 
-    def _history_to_movie(self, video_full_path):
+    def _history_to_movie(self, video_full_path, duplications=1):
         """
             dump all images from history into mp4 file
         :param video_full_path: the mp4 file path to create
         :return:
         """
         fourcc = cv2.VideoWriter_fourcc(*'MP4V')
-        video = cv2.VideoWriter(filename=video_full_path, fourcc=fourcc, fps=8, frameSize=(self.width, self.height))
+        video = cv2.VideoWriter(filename=video_full_path, fourcc=fourcc, fps=24, frameSize=(self.width, self.height))
+        # BTW, if you put fps=8, you will get green screen at iphone, but at android and windows it will be ok.
 
         for image in self.images_history:
-            video.write(image)
+            for _ in range(duplications):
+                video.write(image)
         video.release()
         cv2.destroyAllWindows()
 
@@ -268,7 +273,7 @@ class EmailSender:
         self.connection = yagmail.SMTP(self.user, self.pw)
 
     def send_mail(self, video_full_path, subject):
-        if not self.disable:
+        if self.disable:
             return
         contents = ["new caption", video_full_path]
         self.connection.send(self.send_to, subject, contents)
@@ -339,12 +344,12 @@ class Flow:
     def prepare_mail(self):
         frames = len(self.logger.images_history)
         mp4_full_path = f'{self.output_folder}/caption_{self.image_date}_{frames:>04}.mp4'
-        self.logger.export_to_movie(mp4_full_path)
+        self.logger.export_to_movie(mp4_full_path, duplications=self.conf.output.duplications_of_each_image_at_video)
         subject = f'new motion capture at {self.image_date} with {frames} frames'
         return subject, mp4_full_path
 
     def take_images(self):
-        for i in range(self.conf.detection.check_human_every_x_images):
+        for _ in range(self.conf.detection.check_human_every_x_images):
             self.logger.add_image(self.camera.take_picture())
         self.image_date = datetime.datetime.now().strftime('%Y.%m.%d_%H.%M.%S')
         self.detector.set_image(image_content=self.logger.images_history[-1])
