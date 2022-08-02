@@ -381,4 +381,3 @@ class Flow:
         self.take_actions()
 
 
-Flow(path_to_conf_yml_file=r'C:\Users\israelil\Downloads\configurations.yml')
