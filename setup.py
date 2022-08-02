@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="human_detection",
-    version="0.5",
+    version="0.51",
     author="Lior Israeli",
     author_email="israelilior@gmail.com",
     description="set usb camera as security camera, trigger or human detection and send detection video over mail",
@@ -21,7 +21,7 @@ setuptools.setup(
         "Operating System :: OS Independent",
     ],
     package_data={"": ["*.xlsx"]},
-    install_requires=[['dynaconf', 'yagmail', 'cv2', 'matplotlib']],
+    install_requires=[['dynaconf', 'yagmail', 'opencv-python', 'matplotlib']],
     entry_points={
         'console_scripts': ['human_motion_detection=human_detection.command_line:main'],
     },

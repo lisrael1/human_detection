@@ -333,6 +333,9 @@ class Flow:
             self.looping()
 
     def update_configurations(self):
+        if not os.path.isfile(self.path_to_conf_yml_file):
+            raise FileNotFoundError(f"{self.path_to_conf_yml_file} doesn't exist")
+
         os.environ['HOME'] = os.path.expanduser("~")
         self.conf = Dynaconf(settings_files=[self.path_to_conf_yml_file], environments=False)
         if self.conf.debug.print_debug_log:
